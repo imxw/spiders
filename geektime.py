@@ -24,7 +24,7 @@ def get_all_columns():
     else:
         return []
 
-def get_all_article_id_titles(column_id):
+def get_all_article_title_ids(column_id):
     '''
     获取指定专栏所有文章id及标题
     '''
@@ -48,11 +48,16 @@ def get_all_article_id_titles(column_id):
         info = ret_data['data']
         # print(json.dumps(info, ensure_ascii=False, indent=2))
 
-        return {str(x['id']):x['article_title'] for x in info['list']}
+        title_ids = {x['article_title']:x['id'] for x in info['list']}
+
+        return title_ids
     else:
         return {} 
 
 def get_article_metas(article_id):
+    '''
+    获取文章内容及其他一些元数据
+    '''
     
     url = 'https://time.geekbang.org/serv/v1/article'
     
@@ -69,17 +74,20 @@ def get_article_metas(article_id):
     if code >= 0:
         info = ret_data['data']
         # print(json.dumps(info, ensure_ascii=False, indent=2))
-        article_metas = {}
-        article_metas['article_content'] = info['article_content']
-        article_metas['article_title'] = info['article_title']
-        article_metas['author_name'] = info['author_name']
-        article_metas['article_ctime'] = arrow.get(info['article_ctime']).format('YYYY-MM-DD')
-        article_metas['article_cover'] = info['article_cover']
+        # article_metas = {}
+        keys = ['article_content', 'article_title', 'author_name', 'article_ctime', 'article_cover']
+
+        article_metas = {key:info[key] for key in keys}
+
         return article_metas
     else:
         return {} 
 
 def get_article_comments(article_id):
+    '''
+    获取文章注释信息
+    '''
+    
     url = 'https://time.geekbang.org/serv/v1/comments'
     
     payload = {
@@ -89,7 +97,6 @@ def get_article_comments(article_id):
 
     ret = requests.post(url, headers=headers, json=payload)
     ret_data = ret.json()
-    # print(ret_data)
 
     code = ret_data.get('code', '')
 
@@ -102,17 +109,6 @@ def get_article_comments(article_id):
     #     return article_metas
     # else:
     #     return {} 
-
-def make_comment_html():
-    pass
-
-
-def save_to_local(output_dir):
-    pass
-
-
-def html_to_pdf():
-    pass
 
 
 if __name__ == "__main__":
@@ -129,10 +125,10 @@ if __name__ == "__main__":
         'Content-Type': 'application/json'    
     }
 
-    # print(get_all_columns())
     columns = get_all_columns()
-    # print(columns)
+
     if not columns:
+        print('你未购买任何专栏')
         sys.exit(0)
     
     title_ids = {x['title']:x['extra']['column_sku'] for x in columns}
@@ -142,18 +138,22 @@ if __name__ == "__main__":
 
 
     for col_title, col_sku in title_ids.items():
+
         output_path = os.path.join(output_root, col_title)
 
         col_html_paths = []
 
         if not os.path.isdir(output_path):
             os.makedirs(output_path)
-        article_id_titles = get_all_article_id_titles(col_sku)
+        article_title_ids = get_all_article_title_ids(col_sku)
 
-        for id,title in article_id_titles.items():
+        sorted_title_ids = sorted(article_title_ids.items(), key=lambda item: item[1])
 
+        for item in sorted_title_ids:
+
+            title, id = item
             article_metas = get_article_metas(id)
-            head_html = "<h1>{}</h1>\n<small>{} {}</small>\n<img src={}>".format(article_metas['article_title'], article_metas['article_ctime'], article_metas['author_name'], article_metas['article_cover'])
+            head_html = "<h1>{}</h1>\n<p>{} {}</p>\n<img src={}>".format(article_metas['article_title'], arrow.get(article_metas['article_ctime']).format('YYYY-MM-DD'), article_metas['author_name'], article_metas['article_cover'])
 
             article_html = '\n'.join([head_html, article_metas['article_content']])
 
@@ -163,5 +163,5 @@ if __name__ == "__main__":
                 f.write(article_html)
             col_html_paths.append(file_path)
         
-        # 批量转pdf
+        # 批量转pdf并合并（保存在脚本所在路径）
         pdfkit.from_file(col_html_paths, '{}.pdf'.format(col_title), options={'encoding': 'utf-8'})
